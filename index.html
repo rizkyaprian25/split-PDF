@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>PDF Tools - Split & Compress</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"
+    integrity="sha384:weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI"
+    crossorigin="anonymous" defer></script>
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="split">Split PDF</button>
+      <button class="tab-btn" data-tab="compress">Compress PDF</button>
+    </div>
+
+    <div class="card">
+      <!-- SPLIT TAB -->
+      <div id="split-tab" class="tab-content active">
+        <h1>Ambil halaman tertentu dari PDF</h1>
+        <p class="sub">Upload PDF, tentukan halaman awal dan akhir, lalu unduh hasilnya. Semua proses dilakukan di browser kamu — file tidak dikirim ke server manapun.</p>
+
+        <div class="drop" id="dropZone" role="button" tabindex="0" aria-label="Upload PDF" aria-describedby="dropText">
+          <input type="file" id="fileInput" accept="application/pdf" />
+          <div class="icon">📄</div>
+          <div id="dropText">Klik atau seret file PDF ke sini</div>
+          <div class="filename" id="fileName"></div>
+          <div class="meta" id="fileMeta"></div>
+        </div>
+
+        <div class="fields">
+          <div class="field">
+            <label for="startPage">Halaman awal</label>
+            <input type="number" id="startPage" min="1" placeholder="cth. 2" />
+          </div>
+          <div class="field">
+            <label for="endPage">Halaman akhir</label>
+            <input type="number" id="endPage" min="1" placeholder="cth. 10" />
+          </div>
+        </div>
+
+        <button class="run" id="runBtn" disabled>Eksekusi</button>
+
+        <div class="status" id="status" aria-live="polite"></div>
+        <div class="download" id="downloadWrap">
+          <a id="downloadLink" download="hasil-split.pdf">Unduh PDF hasil</a>
+        </div>
+      </div>
+
+      <!-- COMPRESS TAB -->
+      <div id="compress-tab" class="tab-content">
+        <h1>Kompres file PDF</h1>
+        <p class="sub">Upload PDF dan kompres ukuran filenya. Semua proses dilakukan di browser kamu — file tidak dikirim ke server manapun.</p>
+
+        <div class="drop" id="compressDropZone" role="button" tabindex="0" aria-label="Upload PDF untuk dikompres" aria-describedby="compressDropText">
+          <input type="file" id="compressFileInput" accept="application/pdf" />
+          <div class="icon">📦</div>
+          <div id="compressDropText">Klik atau seret file PDF ke sini</div>
+          <div class="filename" id="compressFileName"></div>
+          <div class="meta" id="compressFileMeta"></div>
+        </div>
+
+        <div class="fields">
+          <div class="field">
+            <label for="compressionLevel">Tingkat kompresi</label>
+            <div class="slider-container">
+              <input type="range" id="compressionLevel" min="1" max="5" value="3" />
+              <div class="slider-labels">
+                <span>Kecil (1)</span>
+                <span id="levelDisplay">Sedang</span>
+                <span>Maksimal (5)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button class="run" id="compressBtn" disabled>Kompres</button>
+
+        <div class="status" id="compressStatus" aria-live="polite"></div>
+        <div class="download" id="compressDownloadWrap">
+          <a id="compressDownloadLink" download="hasil-kompres.pdf">Unduh PDF hasil</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
