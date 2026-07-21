@@ -204,3 +204,42 @@ button.run:not(:disabled):hover { background: #000; }
   font-size: 14px;
   font-weight: 500;
 }
+
+/* PREVIEW STYLES */
+.preview-container {
+  display: flex;
+  overflow-x: auto;
+  gap: 12px;
+  margin-top: 20px;
+  padding-bottom: 8px;
+}
+.preview-container:empty {
+  display: none;
+}
+.preview-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 auto;
+}
+.preview-item canvas {
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  max-width: 120px;
+  height: auto;
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s;
+  background: white;
+}
+.preview-item canvas:hover {
+  transform: translateY(-2px);
+  border-color: #3b82f6;
+}
+.preview-page-num {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
