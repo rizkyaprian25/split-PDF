@@ -118,6 +118,13 @@ let loadedPdfDoc = null;
 let totalPages = 0;
 let currentObjectUrl = null;
 
+// WORD SPLIT VARIABLES
+let wordZip = null;
+let wordArrayBuffer = null;
+let wordTotalPages = 0;
+let wordElementPageMap = [];
+let wordCurrentObjectUrl = null;
+
 // COMPRESS TAB VARIABLES
 let compressPdfBytes = null;
 let compressCurrentObjectUrl = null;
@@ -154,6 +161,23 @@ const statusEl = document.getElementById('status');
 const downloadWrap = document.getElementById('downloadWrap');
 const downloadLink = document.getElementById('downloadLink');
 
+// WORD SPLIT ELEMENTS
+const wordDropZone = document.getElementById('wordDropZone');
+const wordFileInput = document.getElementById('wordFileInput');
+const wordFileName = document.getElementById('wordFileName');
+const wordFileMeta = document.getElementById('wordFileMeta');
+const wordDropText = document.getElementById('wordDropText');
+const wordPreviewContainer = document.getElementById('wordPreviewContainer');
+const wordStartPage = document.getElementById('wordStartPage');
+const wordEndPage = document.getElementById('wordEndPage');
+const wordRunBtn = document.getElementById('wordRunBtn');
+const wordStatusEl = document.getElementById('wordStatus');
+const wordDownloadWrap = document.getElementById('wordDownloadWrap');
+const wordDownloadLink = document.getElementById('wordDownloadLink');
+const wordViewerWrap = document.getElementById('wordViewerWrap');
+const toggleWordViewerBtn = document.getElementById('toggleWordViewerBtn');
+const wordViewerContent = document.getElementById('wordViewerContent');
+
 // COMPRESS TAB ELEMENTS
 const compressDropZone = document.getElementById('compressDropZone');
 const compressFileInput = document.getElementById('compressFileInput');
@@ -178,6 +202,11 @@ function updateStatus(message, type = '') {
   statusEl.className = type ? `status ${type}` : 'status';
 }
 
+function updateWordStatus(message, type = '') {
+  wordStatusEl.textContent = message;
+  wordStatusEl.className = type ? `status ${type}` : 'status';
+}
+
 function updateCompressStatus(message, type = '') {
   compressStatusEl.textContent = message;
   compressStatusEl.className = type ? `status ${type}` : 'status';
@@ -190,6 +219,15 @@ function clearDownloadLink() {
   }
   downloadWrap.style.display = 'none';
   downloadLink.href = '';
+}
+
+function clearWordDownloadLink() {
+  if (wordCurrentObjectUrl) {
+    URL.revokeObjectURL(wordCurrentObjectUrl);
+    wordCurrentObjectUrl = null;
+  }
+  wordDownloadWrap.style.display = 'none';
+  wordDownloadLink.href = '';
 }
 
 function clearCompressDownloadLink() {
@@ -357,6 +395,7 @@ async function renderPreviews(pdfBytesData) {
           startPage.value = i;
           endPage.value = i;
         }
+        updatePdfSelectionHighlight();
       });
       
       wrapper.appendChild(canvas);
@@ -365,11 +404,26 @@ async function renderPreviews(pdfBytesData) {
     }
     
     previewContainer.appendChild(fragment);
+    updatePdfSelectionHighlight();
     updateStatus('');
   } catch (error) {
     console.error('Error rendering previews:', error);
     updateStatus('Gagal memuat sebagian preview.', 'error');
   }
+}
+
+function updatePdfSelectionHighlight() {
+  const start = Number(startPage.value) || 1;
+  const end = Number(endPage.value) || totalPages;
+  const canvases = previewContainer.querySelectorAll('canvas');
+  canvases.forEach((canvas, idx) => {
+    const page = idx + 1;
+    if (page >= start && page <= end) {
+      canvas.classList.add('selected');
+    } else {
+      canvas.classList.remove('selected');
+    }
+  });
 }
 
 function validatePageRange(start, end) {
@@ -425,6 +479,282 @@ async function splitPdf() {
     updateStatus('Terjadi kesalahan saat memproses PDF: ' + (error.message || error), 'error');
   } finally {
     runBtn.disabled = false;
+  }
+}
+
+// ==========================================
+// WORD (.DOCX) SPLIT LOGIC
+// ==========================================
+function parseWordPages(xmlDoc) {
+  const body = xmlDoc.getElementsByTagName("w:body")[0];
+  if (!body) return { totalPages: 1, elementPageMap: [], pageSnippets: { 1: '' } };
+
+  const children = Array.from(body.childNodes).filter(node => node.nodeType === 1 && node.nodeName !== 'w:sectPr');
+
+  let currentPage = 1;
+  const elementPageMap = [];
+  const pageSnippets = {};
+
+  for (let i = 0; i < children.length; i++) {
+    const el = children[i];
+    const text = el.textContent ? el.textContent.trim() : '';
+
+    const hasManualBreak = el.getElementsByTagName("w:br").length > 0 && Array.from(el.getElementsByTagName("w:br")).some(br => br.getAttribute("w:type") === "page");
+    const hasRenderedBreak = el.getElementsByTagName("w:lastRenderedPageBreak").length > 0;
+    const hasSectionBreak = el.getElementsByTagName("w:sectPr").length > 0;
+
+    elementPageMap.push({
+      index: i,
+      page: currentPage,
+      textSnippet: text.substring(0, 150)
+    });
+
+    if (!pageSnippets[currentPage]) {
+      pageSnippets[currentPage] = text;
+    } else if (pageSnippets[currentPage].length < 250 && text) {
+      pageSnippets[currentPage] += ' ' + text;
+    }
+
+    if (hasManualBreak || hasRenderedBreak || hasSectionBreak) {
+      currentPage++;
+    }
+  }
+
+  // Fallback: jika tidak ada tag page break eksplisit, estimasi halaman berdasarkan volume teks (~2000 karakter per halaman A4)
+  if (currentPage === 1 && children.length > 3) {
+    let runningChars = 0;
+    const CHARS_PER_PAGE = 2000;
+    currentPage = 1;
+    for (let i = 0; i < elementPageMap.length; i++) {
+      elementPageMap[i].page = currentPage;
+      const len = children[i].textContent.length;
+      runningChars += len;
+      if (!pageSnippets[currentPage]) {
+        pageSnippets[currentPage] = elementPageMap[i].textSnippet;
+      } else if (pageSnippets[currentPage].length < 250) {
+        pageSnippets[currentPage] += ' ' + elementPageMap[i].textSnippet;
+      }
+      if (runningChars >= CHARS_PER_PAGE) {
+        currentPage++;
+        runningChars = 0;
+      }
+    }
+  }
+
+  return {
+    totalPages: Math.max(1, currentPage),
+    elementPageMap,
+    pageSnippets
+  };
+}
+
+function renderWordPreviews(totalPages, pageSnippets) {
+  wordPreviewContainer.innerHTML = '';
+  const fragment = document.createDocumentFragment();
+
+  for (let i = 1; i <= totalPages; i++) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'preview-item';
+
+    const card = document.createElement('div');
+    card.className = 'word-page-card';
+    card.dataset.page = i;
+    card.title = `Halaman ${i} (Klik untuk memilih)`;
+
+    const badge = document.createElement('div');
+    badge.className = 'card-badge';
+    badge.textContent = `Halaman ${i}`;
+
+    const snippet = document.createElement('div');
+    snippet.className = 'card-snippet';
+    snippet.textContent = pageSnippets[i] || '(Halaman ini berisi tabel/gambar/konten terformat)';
+
+    card.appendChild(badge);
+    card.appendChild(snippet);
+
+    card.addEventListener('click', () => {
+      const currentStart = Number(wordStartPage.value);
+      const currentEnd = Number(wordEndPage.value);
+      if (i < currentStart) {
+        wordStartPage.value = i;
+      } else if (i > currentEnd) {
+        wordEndPage.value = i;
+      } else {
+        wordStartPage.value = i;
+        wordEndPage.value = i;
+      }
+      updateWordSelectionHighlight();
+    });
+
+    const pageLabel = document.createElement('div');
+    pageLabel.className = 'preview-page-num';
+    pageLabel.textContent = `Hal ${i}`;
+
+    wrapper.appendChild(card);
+    wrapper.appendChild(pageLabel);
+    fragment.appendChild(wrapper);
+  }
+
+  wordPreviewContainer.appendChild(fragment);
+  updateWordSelectionHighlight();
+}
+
+function updateWordSelectionHighlight() {
+  const start = Number(wordStartPage.value) || 1;
+  const end = Number(wordEndPage.value) || wordTotalPages;
+  const cards = wordPreviewContainer.querySelectorAll('.word-page-card');
+  cards.forEach(card => {
+    const page = Number(card.dataset.page);
+    if (page >= start && page <= end) {
+      card.classList.add('selected');
+    } else {
+      card.classList.remove('selected');
+    }
+  });
+}
+
+async function handleWordFile(file) {
+  updateWordStatus('');
+  clearWordDownloadLink();
+  if (wordPreviewContainer) wordPreviewContainer.innerHTML = '';
+  if (wordViewerContent) wordViewerContent.innerHTML = '';
+  if (wordViewerWrap) wordViewerWrap.style.display = 'none';
+  wordRunBtn.disabled = true;
+
+  if (!file.name.toLowerCase().endsWith('.docx')) {
+    updateWordStatus('File harus berformat Word (.docx).', 'error');
+    return;
+  }
+
+  try {
+    updateWordStatus('Membaca file Word...');
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+
+    // Verifikasi magic bytes ZIP PK (0x50, 0x4B)
+    if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4B) {
+      throw new Error('Bukan format .docx yang valid.');
+    }
+
+    if (typeof JSZip === 'undefined') {
+      throw new Error('Library JSZip belum siap. Silakan muat ulang browser.');
+    }
+
+    wordArrayBuffer = arrayBuffer;
+    wordZip = await JSZip.loadAsync(arrayBuffer);
+    const docXmlFile = wordZip.file("word/document.xml");
+    if (!docXmlFile) {
+      throw new Error('File tidak memiliki struktur dokumen Word (word/document.xml).');
+    }
+
+    const docXmlText = await docXmlFile.async("text");
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXmlText, "application/xml");
+
+    const parsed = parseWordPages(xmlDoc);
+    wordTotalPages = parsed.totalPages;
+    wordElementPageMap = parsed.elementPageMap;
+
+    wordDropText.textContent = 'Klik atau seret file Word lain untuk mengganti';
+    wordFileName.textContent = file.name;
+    wordFileMeta.textContent = `${wordTotalPages} halaman (perkiraan) · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+
+    wordStartPage.max = wordTotalPages;
+    wordEndPage.max = wordTotalPages;
+    wordStartPage.value = 1;
+    wordEndPage.value = wordTotalPages;
+
+    wordRunBtn.disabled = false;
+    updateWordStatus('');
+
+    // Render thumbnail halaman
+    renderWordPreviews(parsed.totalPages, parsed.pageSnippets);
+
+    // Render tampilan dokumen utuh jika docx-preview tersedia
+    if (typeof docx !== 'undefined' && docx.renderAsync) {
+      wordViewerWrap.style.display = 'block';
+      docx.renderAsync(arrayBuffer, wordViewerContent, null, {
+        inWrapper: false,
+        breakPages: true
+      }).catch(err => {
+        console.warn('docx-preview warning:', err);
+      });
+    }
+
+  } catch (error) {
+    wordZip = null;
+    wordArrayBuffer = null;
+    wordTotalPages = 0;
+    wordElementPageMap = [];
+    updateWordStatus('Gagal membaca file Word: ' + (error.message || error), 'error');
+  }
+}
+
+async function splitWord() {
+  const start = Number(wordStartPage.value);
+  const end = Number(wordEndPage.value);
+
+  updateWordStatus('');
+  clearWordDownloadLink();
+
+  if (!wordZip) {
+    updateWordStatus('Upload file Word (.docx) terlebih dahulu.', 'error');
+    return;
+  }
+
+  if (isNaN(start) || isNaN(end) || start < 1 || end > wordTotalPages) {
+    updateWordStatus('Masukkan nomor halaman yang valid.', 'error');
+    return;
+  }
+
+  if (start > end) {
+    updateWordStatus('Halaman awal tidak boleh lebih besar dari halaman akhir.', 'error');
+    return;
+  }
+
+  wordRunBtn.disabled = true;
+  updateWordStatus('Memproses split file Word...');
+
+  try {
+    const docXmlFile = wordZip.file("word/document.xml");
+    const docXmlText = await docXmlFile.async("text");
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXmlText, "application/xml");
+    const body = xmlDoc.getElementsByTagName("w:body")[0];
+
+    const children = Array.from(body.childNodes).filter(node => node.nodeType === 1 && node.nodeName !== 'w:sectPr');
+
+    // Hapus elemen yang berada di luar jangkauan [start..end]
+    children.forEach((child, index) => {
+      const map = wordElementPageMap[index];
+      if (map && (map.page < start || map.page > end)) {
+        body.removeChild(child);
+      }
+    });
+
+    const serializer = new XMLSerializer();
+    const newDocXmlText = serializer.serializeToString(xmlDoc);
+
+    // Klon zip asli agar gambar/media, style, font, dan header/footer tetap utuh
+    const newZip = await JSZip.loadAsync(wordArrayBuffer);
+    newZip.file("word/document.xml", newDocXmlText);
+
+    const newDocxBlob = await newZip.generateAsync({
+      type: "blob",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    });
+
+    wordCurrentObjectUrl = URL.createObjectURL(newDocxBlob);
+    wordDownloadLink.href = wordCurrentObjectUrl;
+    wordDownloadLink.download = `halaman-${start}-${end}.docx`;
+    wordDownloadWrap.style.display = 'block';
+
+    updateWordStatus(`Selesai! Halaman ${start} sampai ${end} berhasil dipisah.`, 'ok');
+  } catch (error) {
+    console.error('Error during splitWord:', error);
+    updateWordStatus('Terjadi kesalahan saat memproses Word: ' + (error.message || error), 'error');
+  } finally {
+    wordRunBtn.disabled = false;
   }
 }
 
@@ -581,6 +911,62 @@ dropZone.addEventListener('dragleave', () => {
 dropZone.addEventListener('drop', handleDropEvent);
 
 runBtn.addEventListener('click', splitPdf);
+startPage.addEventListener('input', updatePdfSelectionHighlight);
+endPage.addEventListener('input', updatePdfSelectionHighlight);
+
+// WORD TAB EVENT LISTENERS
+function openWordFilePicker() {
+  wordFileInput.click();
+}
+
+function handleWordDropEvent(event) {
+  event.preventDefault();
+  wordDropZone.classList.remove('dragover');
+  if (event.dataTransfer.files.length) {
+    handleWordFile(event.dataTransfer.files[0]);
+  }
+}
+
+wordFileInput.addEventListener('change', (event) => {
+  if (event.target.files.length) {
+    handleWordFile(event.target.files[0]);
+  }
+});
+
+wordDropZone.addEventListener('click', openWordFilePicker);
+wordDropZone.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    openWordFilePicker();
+  }
+});
+
+wordDropZone.addEventListener('dragover', (event) => {
+  event.preventDefault();
+  wordDropZone.classList.add('dragover');
+});
+
+wordDropZone.addEventListener('dragleave', () => {
+  wordDropZone.classList.remove('dragover');
+});
+wordDropZone.addEventListener('drop', handleWordDropEvent);
+
+wordStartPage.addEventListener('input', updateWordSelectionHighlight);
+wordEndPage.addEventListener('input', updateWordSelectionHighlight);
+
+wordRunBtn.addEventListener('click', splitWord);
+
+if (toggleWordViewerBtn) {
+  toggleWordViewerBtn.addEventListener('click', () => {
+    if (wordViewerContent.classList.contains('show')) {
+      wordViewerContent.classList.remove('show');
+      toggleWordViewerBtn.textContent = '👁️ Lihat Dokumen Lengkap';
+    } else {
+      wordViewerContent.classList.add('show');
+      toggleWordViewerBtn.textContent = '🙈 Sembunyikan Dokumen';
+    }
+  });
+}
 
 // COMPRESS TAB EVENT LISTENERS
 compressFileInput.addEventListener('change', (event) => {

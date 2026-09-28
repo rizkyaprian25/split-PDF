@@ -2,18 +2,22 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>PDF Tools - Split & Compress</title>
+  <title>PDF & Word Tools - Split & Compress</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"
     integrity="sha384:weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI"
     crossorigin="anonymous" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docx-preview@0.3.2/dist/docx-preview.css" />
+  <script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.2/dist/docx-preview.min.js" defer></script>
   <script src="script.js" defer></script>
 </head>
 <body>
   <div class="container">
     <div class="tabs">
       <button class="tab-btn active" data-tab="split">Split PDF</button>
+      <button class="tab-btn" data-tab="split-word">Split Word</button>
       <button class="tab-btn" data-tab="compress">Compress PDF</button>
     </div>
 
@@ -49,6 +53,45 @@
         <div class="status" id="status" aria-live="polite"></div>
         <div class="download" id="downloadWrap">
           <a id="downloadLink" download="hasil-split.pdf">Unduh PDF hasil</a>
+        </div>
+      </div>
+
+      <!-- SPLIT WORD TAB -->
+      <div id="split-word-tab" class="tab-content">
+        <h1>Ambil halaman tertentu dari Word (.docx)</h1>
+        <p class="sub">Upload file Word (.docx), lihat preview halamannya, tentukan halaman awal dan akhir, lalu unduh hasilnya. Semua proses dilakukan di browser kamu — file tidak dikirim ke server manapun.</p>
+
+        <div class="drop" id="wordDropZone" role="button" tabindex="0" aria-label="Upload Word" aria-describedby="wordDropText">
+          <input type="file" id="wordFileInput" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+          <div class="icon">📝</div>
+          <div id="wordDropText">Klik atau seret file Word (.docx) ke sini</div>
+          <div class="filename" id="wordFileName"></div>
+          <div class="meta" id="wordFileMeta"></div>
+        </div>
+
+        <div id="wordPreviewContainer" class="preview-container"></div>
+
+        <div id="wordViewerWrap" class="word-viewer-wrap" style="display: none;">
+          <button type="button" id="toggleWordViewerBtn" class="toggle-viewer-btn">👁️ Lihat Dokumen Lengkap</button>
+          <div id="wordViewerContent" class="word-doc-viewer"></div>
+        </div>
+
+        <div class="fields">
+          <div class="field">
+            <label for="wordStartPage">Halaman awal</label>
+            <input type="number" id="wordStartPage" min="1" placeholder="cth. 1" />
+          </div>
+          <div class="field">
+            <label for="wordEndPage">Halaman akhir</label>
+            <input type="number" id="wordEndPage" min="1" placeholder="cth. 5" />
+          </div>
+        </div>
+
+        <button class="run" id="wordRunBtn" disabled>Eksekusi Split Word</button>
+
+        <div class="status" id="wordStatus" aria-live="polite"></div>
+        <div class="download" id="wordDownloadWrap">
+          <a id="wordDownloadLink" download="hasil-split.docx">Unduh Word hasil (.docx)</a>
         </div>
       </div>
 
